@@ -4,7 +4,7 @@
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandpath`" `"$args`"" -Verb RunAs; exit }
 
 # List of modules to install
-$Modules = @("ImportExcel", "PSWritePDF", "PSWriteWord", "PSYahooFinance", "PoshInternals", "PowerSploit") 
+$Modules = @("ImportExcel", "PSWritePDF", "PSWriteWord", "PSWordCloud", "PSYahooFinance", "PoshInternals", "PowerSploit") 
 
 # Function to install each module
 Function Install-ModuleList {
