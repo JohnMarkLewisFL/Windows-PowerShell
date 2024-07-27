@@ -120,9 +120,12 @@ Start-Sleep -Seconds 2
 # Saves the BitLocker cmdlet output as a .csv file so the rest of the script can use the output data
 $BitLockerOutput = Import-Csv -Path $DesktopFolder\\BitLockerTemp.csv
 
+# Retrieves the list of currently available power plans and format it
+$PowerPlans = powercfg /list
+$PowerPlanDetails = $PowerPlans -split "`n" | ForEach-Object { if ($_ -match 'Power Scheme GUID: (.+?)  \((.+)\)') { [PSCustomObject]@{'PowerScheme GUID'=$matches[1]; 'Plan Name'=$matches[2]} } }
 
 # Prompt the user to save the results as an Excel spreadsheet (.xlsx) or .txt file
-Write-Host "You will now be prompted to save the results spreadsheet`n`n"
+Write-Host "You will now be prompted to save the results as a spreadsheet or .txt file`n`n"
 Start-Sleep -Seconds 3
 $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
 $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath('Desktop')
@@ -144,10 +147,11 @@ if ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $DriveListFormatting | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Drive List" -Append
             $BitLockerOutput | Export-Excel -Path $FilePath -AutoSize -WorksheetName "BitLocker Recovery" -Append
             $PrintersList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Printers" -Append
-            $WifiList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Wi-Fi Networks" -Append
+            $WiFiList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Wi-Fi Networks" -Append
             $NetworkAdapterList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Network Adapters" -Append
             $BluetoothList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Bluetooth Devices" -Append
             $USBList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "USB Devices" -Append
+            $PowerPlanDetails | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Power Plans" -Append
         }
         2 { 
             $SystemInfo | Out-File -FilePath $FilePath
@@ -158,7 +162,8 @@ if ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $NetworkAdapterList | Out-File -FilePath $FilePath -Append
             $PrintersList | Out-File -FilePath $FilePath -Append
             $USBList | Out-File -FilePath $FilePath -Append
-            $WifiList | Out-File -FilePath $FilePath -Append
+            $WiFiList | Out-File -FilePath $FilePath -Append
+            $PowerPlanDetails | Out-File -FilePath $FilePath -Append
         }
     }
 }
