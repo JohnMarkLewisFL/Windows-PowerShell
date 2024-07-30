@@ -124,6 +124,22 @@ $BitLockerOutput = Import-Csv -Path $DesktopFolder\\BitLockerTemp.csv
 $PowerPlans = powercfg /list
 $PowerPlanDetails = $PowerPlans -split "`n" | ForEach-Object { if ($_ -match 'Power Scheme GUID: (.+?)  \((.+)\)') { [PSCustomObject]@{'PowerScheme GUID'=$matches[1]; 'Plan Name'=$matches[2]} } }
 
+# Generates the battery report as an XML file
+& powercfg /batteryreport /XML /OUTPUT $DesktopFolder\\BatteryReport.xml
+Start-Sleep -Seconds 2
+
+# Loads the battery report XML file, parses the data, and formats it to be more Excel-friendly
+[xml]$BatteryReport = Get-Content $DesktopFolder\\BatteryReport.xml
+$BatteryReportData = $BatteryReport.BatteryReport.Batteries | ForEach-Object {
+    [PSCustomObject]@{
+        DesignCapacity = $_.Battery.DesignCapacity
+        FullChargeCapacity = $_.Battery.FullChargeCapacity
+        BatteryHealth = [math]::floor([int64]$_.Battery.FullChargeCapacity/[int64]$_.Battery.DesignCapacity*100)
+        CycleCount = $_.Battery.CycleCount
+        ID = $_.Battery.id
+    }
+}
+
 # Prompt the user to save the results as an Excel spreadsheet (.xlsx) or .txt file
 Write-Host "You will now be prompted to save the results as a spreadsheet or .txt file`n`n"
 Start-Sleep -Seconds 3
@@ -152,6 +168,7 @@ if ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $BluetoothList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Bluetooth Devices" -Append
             $USBList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "USB Devices" -Append
             $PowerPlanDetails | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Power Plans" -Append
+            $BatteryReportData | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Battery Health" -Append
         }
         2 { 
             $SystemInfo | Out-File -FilePath $FilePath
@@ -164,12 +181,14 @@ if ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $USBList | Out-File -FilePath $FilePath -Append
             $WiFiList | Out-File -FilePath $FilePath -Append
             $PowerPlanDetails | Out-File -FilePath $FilePath -Append
+            $BatteryReportData | Out-File -FilePath $FilePath -Append
         }
     }
 }
 
-# Delete the temporary .csv file
+# Deletes the temporary files
 Remove-Item -Path $DesktopFolder\\BitLockerTemp.csv
+Remove-Item -Path $DesktopFolder\\BatteryReport.xml
 
 # End message
 Write-Host "Your results spreadsheet has been saved at: "$SaveFileDialog.FileName
