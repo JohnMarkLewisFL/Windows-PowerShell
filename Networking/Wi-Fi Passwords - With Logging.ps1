@@ -41,7 +41,7 @@ $WirelessProfiles | ForEach-Object {
             $SelectedFileType = [System.IO.Path]::GetExtension($FileSaveDialogBox.FileName)
             Switch ($SelectedFileType) {
                 ".xlsx" {
-                    $List | Export-Excel -Path $FileSaveDialogBox.FileName -WorksheetName "Wi-fi Credentials" -TableName "WiFiCredentials" -TableStyle Medium9
+                    $List | Export-Excel -Path $FileSaveDialogBox.FileName -WorksheetName "Wi-Fi Credentials" -TableName "WiFiCredentials" -TableStyle Medium9
                 }
                 ".csv" {
                     $List | Export-Csv -Path $FileSaveDialogBox.FileName -NoTypeInformation
