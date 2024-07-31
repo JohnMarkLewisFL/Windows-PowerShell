@@ -1,9 +1,16 @@
 # This script is designed to continuously ping a destination (a number of times defined by the user) and log the results to a file
 
+
 # The ImportExcel module will allow the results to be exported properly into a .xlsx file type
 # If there are error messages regarding the 'Export-Excel' cmdlet, then run the following line in a separate PowerShell window to install the ImportExcel module manually:
 # Install-Module -Name ImportExcel
 Get-Module ImportExcel | Import-Module -Force
+
+# Introduction message
+Write-Host "This script will continuously ping a destination for a number of times you specify and log the results"
+Start-Sleep -Seconds 2
+Write-Host `n"You will now be prompted to save the log file and select its file type"`n
+Start-Sleep -Seconds 3
 
 # Creates the file save dialog box
 Add-Type -AssemblyName System.Windows.Forms
@@ -24,9 +31,9 @@ $Destination = Read-Host -Prompt 'Enter the IP address, hostname (may require th
 
 # Prompt the user for the number of pings and validate the input
 Do {
-    $PingCount = Read-Host -Prompt 'Enter the number of times to ping the destination'
+    $PingCount = Read-Host -Prompt `n"Enter the number of times to ping the destination"
     If (![int]::TryParse($PingCount, [ref]$null) -or [int]$PingCount -lt 1 -or [int]$PingCount -gt 2147483647) {
-        Write-Host "Input error. Please enter a number between 1 and 2147483647."
+        Write-Host `n"Input error. Please enter a number between 1 and 2147483647."
     }
 } While (![int]::TryParse($PingCount, [ref]$null) -or [int]$PingCount -lt 1 -or [int]$PingCount -gt 2147483647)
 
@@ -69,9 +76,14 @@ For ($i = 1; $i -le [int]$PingCount; $i++) {
 
 # Save the results to the selected file type
 If ($FilePath -match ".xlsx$") {
-    $Results | Export-Excel -Path $FilePath
+    $Results | Export-Excel -Path $FilePath -TableName "PingResults" -TableStyle Medium9
 } Elseif ($FilePath -match ".csv$") {
     $Results | Export-Csv -Path $FilePath -NoTypeInformation
 } Elseif ($FilePath -match ".txt$") {
     $Results | Out-File -FilePath $FilePath
 }
+
+# Conclusion message
+Write-Host `n"The continuous ping operation has completed"
+Write-Host `n`n"The results have been saved at the following location: $FilePath"
+Start-Sleep -Seconds 5
