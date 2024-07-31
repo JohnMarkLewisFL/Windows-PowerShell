@@ -11,7 +11,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Get-Module ImportExcel | Import-Module -Force
 
 # Write a message to the user
-Write-Host "Please wait while the system information is gathered. The BitLocker portion will run as administrator.`n`n"
+Write-Host "Please wait while the system information is gathered. The BitLocker portion will run as administrator.`n"
 
 # Get the screen resolution
 $Screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -55,28 +55,58 @@ $SystemInfo = New-Object PSObject -Property ([ordered]@{
 })
 
 # Gets a list of the installed software
-$InstalledSoftwareList = Get-CimInstance -Class Win32_Product | Select-Object Name,Version,Vendor,InstallDate,Description
+$InstalledSoftwareList = Get-CimInstance -Class Win32_Product | Select-Object Name,Version,Vendor,@{Name="Install Date";Expression={([datetime]::ParseExact($_.InstallDate, 'yyyyMMdd', $null)).ToShortDateString()}},Description
 
 # Gets all installed Bluetooth adapters and devices
 $BluetoothList = Get-PnpDevice | Where-Object { $_.Class -eq "Bluetooth" } | Select-Object Name, Status
 
+# Function to convert subnet masks to CIDR notation
+Function Convert-SubnetMaskToCIDR {
+    Param (
+        [string]$SubnetMask
+    )
+    $Octets = $SubnetMask.Split('.')
+    $CIDR = 0
+    ForEach ($Octet In $Octets) {
+        $CIDR += [Convert]::ToString([int]$octet, 2).Replace('0', '').Length
+    }
+    Return "/$CIDR"
+}
+
+# Function to convert CIDR to subnet masks
+Function Convert-CIDRToSubnetMask {
+    Param (
+        [int]$CIDR
+    )
+    $Mask = [math]::Pow(2, 32) - [math]::Pow(2, 32 - $CIDR)
+    $Bytes = [BitConverter]::GetBytes([UInt32]$mask)
+    [IPAddress]::new($Bytes).IPAddressToString
+}
+
 # Gets all installed network adapters
-$NetworkAdapterList = Get-WmiObject -Class Win32_NetworkAdapterConfiguration | 
-                        ForEach-Object {
-                            $ipv4 = $_.IPAddress | Where-Object { $_ -notmatch ":" }
-                            $ipv6 = $_.IPAddress | Where-Object { $_ -match ":" }
-                            $obj = New-Object PSObject -Property ([ordered]@{
-                                Description = $_.Description
-                                MACAddress = $_.MACAddress
-                                IPAddressIPv4 = $ipv4
-                                IPAddressIPv6 = $ipv6
-                                IPSubnet = ($_.IPSubnet -join ", ")
-                            })
-                            $obj
-                        }
+$NetworkAdapterList = Get-NetIPConfiguration | ForEach-Object {
+    $IPV4 = (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4).IPAddress
+    $IPV6 = (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv6).IPAddress
+    $SubnetMaskV4 = Convert-CIDRToSubnetMask -CIDR (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4).PrefixLength
+    $SubnetCIDRV4 = Convert-SubnetMaskToCIDR -subnetMask $SubnetMaskV4
+    $SubnetMaskV6 = (Get-NetIPAddress -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv6).PrefixLength
+    $SubnetCIDRV6 = "/$SubnetMaskV6"
+    $MACAddress = (Get-NetAdapter -InterfaceIndex $_.InterfaceIndex).MacAddress
+    $Obj = New-Object PSObject -Property ([ordered]@{
+        Description = $_.InterfaceAlias
+        "MAC Address" = $MACAddress
+        "IPv4 Address" = $IPV4
+        "IPv4 Subnet Mask" = $SubnetMaskV4
+        "IPv4 Subnet CIDR" = $SubnetCIDRV4
+        "IPv6 Address" = $IPV6
+        "IPv6 Subnet Mask" = $SubnetMaskV6
+        "IPv6 Subnet CIDR" = $SubnetCIDRV6
+    })
+    $Obj
+}
 
 # Gets all installed printers and their port names (software printers may show a strange port)
-$PrintersList = Get-Printer | Select-Object Name, PortName
+$PrintersList = Get-Printer | Select-Object Name,@{Name="Port Name";Expression={$_.PortName}}
 
 # Gets installed USB adapters and devices while filtering out most of the generic entries
 $ExcludeUSBNames = "USB Composite Device", "USB Printing Support", "USB Mass Storage Device", "Generic SuperSpeed USB Hub", "USB Root Hub", "USB Root Hub (USB 3.0)", "Generic USB Hub"
@@ -87,8 +117,8 @@ $DriveList = Get-WmiObject -Class Win32_LogicalDisk
 $DriveListFormatting = $DriveList | ForEach-Object {
     New-Object -TypeName PSObject -Property @{
         Username = $Username
-        DriveLetter = $_.DeviceID
-        Location = if ($_.DriveType -eq 4) { $_.ProviderName } else { $_.VolumeName }
+        "Drive Letter" = $_.DeviceID
+        Location = If ($_.DriveType -eq 4) { $_.ProviderName } Else { $_.VolumeName }
     }
 }
 
@@ -97,7 +127,7 @@ $WirelessProfiles = netsh wlan show profiles | Select-String -Pattern "All User 
 
 
 # For each profile found with the netsh command, show the password in plaintext and display the SSID in columns
-$WirelessProfiles | foreach {
+$WirelessProfiles | ForEach {
 	$ProfileData = netsh wlan show profiles name=$_ key="clear";
 	$SSID = $ProfileData | Select-String -Pattern "SSID Name" | %{ ($_ -split ":")[-1].Trim().Trim('"') };
 	$PSK = $ProfileData | Select-String -Pattern "Key Content" | %{ ($_ -split ":")[-1].Trim() };
@@ -116,32 +146,31 @@ $DesktopFolder = "$env:USERPROFILE\\Desktop"
 $BitLockerCommand = "(Get-BitLockerVolume -MountPoint C).KeyProtector | Select-Object KeyProtectorId,KeyProtectorType,RecoveryPassword | Export-Csv -Path $DesktopFolder\\BitLockerTemp.csv -NoTypeInformation"
 Start-Process powershell -Verb runAs -ArgumentList "-Command & {$BitLockerCommand}"
 Start-Sleep -Seconds 2
-
 # Saves the BitLocker cmdlet output as a .csv file so the rest of the script can use the output data
 $BitLockerOutput = Import-Csv -Path $DesktopFolder\\BitLockerTemp.csv
 
 # Retrieves the list of currently available power plans and format it
 $PowerPlans = powercfg /list
-$PowerPlanDetails = $PowerPlans -split "`n" | ForEach-Object { if ($_ -match 'Power Scheme GUID: (.+?)  \((.+)\)') { [PSCustomObject]@{'PowerScheme GUID'=$matches[1]; 'Plan Name'=$matches[2]} } }
+$PowerPlanDetails = $PowerPlans -split "`n" | ForEach-Object { if ($_ -match 'Power Scheme GUID: (.+?)  \((.+)\)') { [PSCustomObject]@{'Power Scheme GUID'=$matches[1]; 'Plan Name'=$matches[2]} } }
 
 # Generates the battery report as an XML file
 & powercfg /batteryreport /XML /OUTPUT $DesktopFolder\\BatteryReport.xml
 Start-Sleep -Seconds 2
 
 # Loads the battery report XML file, parses the data, and formats it to be more Excel-friendly
-[xml]$BatteryReport = Get-Content $DesktopFolder\\BatteryReport.xml
+[xml]$BatteryReport = Get-Content "$DesktopFolder\BatteryReport.xml"
 $BatteryReportData = $BatteryReport.BatteryReport.Batteries | ForEach-Object {
     [PSCustomObject]@{
-        DesignCapacity = $_.Battery.DesignCapacity
-        FullChargeCapacity = $_.Battery.FullChargeCapacity
-        BatteryHealth = [math]::floor([int64]$_.Battery.FullChargeCapacity/[int64]$_.Battery.DesignCapacity*100)
-        CycleCount = $_.Battery.CycleCount
+        "Design Capacity" = $_.Battery.DesignCapacity
+        "Full Charge Capacity" = $_.Battery.FullChargeCapacity
+        "Battery Health" = [math]::floor([int64]$_.Battery.FullChargeCapacity/[int64]$_.Battery.DesignCapacity*100)
+        "Cycle Count" = $_.Battery.CycleCount
         ID = $_.Battery.id
     }
 }
 
 # Prompt the user to save the results as an Excel spreadsheet (.xlsx) or .txt file
-Write-Host "You will now be prompted to save the results as a spreadsheet or .txt file`n`n"
+Write-Host `n"You will now be prompted to save the results as a spreadsheet or .txt file"
 Start-Sleep -Seconds 3
 $SaveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
 $SaveFileDialog.InitialDirectory = [Environment]::GetFolderPath('Desktop')
@@ -151,24 +180,24 @@ $SaveFileDialog.RestoreDirectory = $true
 $SaveFileDialog.FileName = "System Information - $Hostname"
 $SaveFileDialog.Title = "Save Results Spreadsheet As"
 
-if ($SaveFileDialog.ShowDialog() -eq 'OK') {
+If ($SaveFileDialog.ShowDialog() -eq 'OK') {
     $FileType = $SaveFileDialog.FilterIndex
     $FilePath = $SaveFileDialog.FileName
 
     # Save the system information according to the selected file type
-    switch ($FileType) {
+    Switch ($FileType) {
         1 { 
-            $SystemInfo | Export-Excel -Path $FilePath -AutoSize -WorksheetName "System Info"
-            $InstalledSoftwareList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Installed Software" -Append
-            $DriveListFormatting | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Drive List" -Append
-            $BitLockerOutput | Export-Excel -Path $FilePath -AutoSize -WorksheetName "BitLocker Recovery" -Append
-            $PrintersList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Printers" -Append
-            $WiFiList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Wi-Fi Networks" -Append
-            $NetworkAdapterList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Network Adapters" -Append
-            $BluetoothList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Bluetooth Devices" -Append
-            $USBList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "USB Devices" -Append
-            $PowerPlanDetails | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Power Plans" -Append
-            $BatteryReportData | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Battery Health" -Append
+            $SystemInfo | Export-Excel -Path $FilePath -AutoSize -WorksheetName "System Info" -TableName "SystemInfo" -TableStyle Medium9
+            $InstalledSoftwareList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Installed Software" -TableName "InstalledSoftware" -TableStyle Medium9 -Append
+            $DriveListFormatting | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Drive List" -TableName "DriveList" -TableStyle Medium9 -Append
+            $BitLockerOutput | Select-Object @{Name='Key Protector Id';Expression={$_.KeyProtectorId}}, @{Name='Key Protector Type';Expression={$_.KeyProtectorType}}, @{Name='Recovery Password';Expression={$_.RecoveryPassword}} | Export-Excel -Path $FilePath -AutoSize -WorksheetName "BitLocker Recovery" -TableName "BitLockerRecovery" -TableStyle Medium9 -Append
+            $PrintersList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Printers" -TableName "Printers" -TableStyle Medium9 -Append
+            $WiFiList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Wi-Fi Credentials" -TableName "WiFiCredentials" -TableStyle Medium9 -Append
+            $NetworkAdapterList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Network Adapters" -TableName "NetworkAdapters" -TableStyle Medium9 -Append
+            $BluetoothList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Bluetooth Devices" -TableName "BluetoothDevices" -TableStyle Medium9 -Append
+            $USBList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "USB Devices" -TableName "USBDevices" -TableStyle Medium9 -Append
+            $PowerPlanDetails | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Power Plans" -TableName "PowerPlans" -TableStyle Medium9 -Append
+            $BatteryReportData | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Battery Health" -TableName "BatteryHealth" -TableStyle Medium9 -Append
         }
         2 { 
             $SystemInfo | Out-File -FilePath $FilePath
@@ -191,7 +220,7 @@ Remove-Item -Path $DesktopFolder\\BitLockerTemp.csv
 Remove-Item -Path $DesktopFolder\\BatteryReport.xml
 
 # End message
-Write-Host "Your results spreadsheet has been saved at: "$SaveFileDialog.FileName
+Write-Host `n"Your results spreadsheet has been saved at: $FilePath"
 Start-Sleep -Seconds 3
-Write-Host "`n`nThis window will close shortly."
-Start-Sleep -Seconds 3
+Write-Host `n"This window will close shortly."
+Start-Sleep -Seconds 5
