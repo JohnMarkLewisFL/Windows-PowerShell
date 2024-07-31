@@ -6,6 +6,12 @@
 # Install-Module -Name ImportExcel
 Get-Module ImportExcel | Import-Module -Force
 
+# Introduction message
+Write-Host "This script will retrieve the saved Wi-Fi SSIDs and PSKs (passwords) for all users on this computer"
+Start-Sleep -Seconds 2
+Write-Host `n"You will now be prompted to save the log file and select its file type"
+Start-Sleep -Seconds 3
+
 # Gather the SSID from the netsh command and split the unused text and whitespaces
 $WirelessProfiles = netsh wlan show profiles | Select-String -Pattern "All User Profile" | ForEach-Object{ ($_ -split ":")[-1].Trim() };
 
@@ -24,21 +30,21 @@ $WirelessProfiles | ForEach-Object {
         
         # Creates the save dialog box
         $FileSaveDialogBox = New-Object System.Windows.Forms.SaveFileDialog
-        $FileSaveDialogBox.Filter = "CSV (*.csv)|*.csv|Excel (*.xlsx)|*.xlsx|Text (*.txt)|*.txt" # Sets the default file type options
+        $FileSaveDialogBox.Filter = "Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv|Text (*.txt)|*.txt" # Sets the default file type options
         $FileSaveDialogBox.Title = "Save Wi-Fi Credentials As"
         $FileSaveDialogBox.FileName = "Wi-Fi Passwords - $env:computername"  # Sets the default file name (can be changed by the user)
         #$FileSaveDialogBox.InitialDirectory = [Environment]::GetFolderPath('Downloads') # Sets the default folder location of the save file dialog box if desired
-        
+
         # Opens the save dialog box and sets the file type as noted by the user
-        $result = $FileSaveDialogBox.ShowDialog()
-        if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        $Result = $FileSaveDialogBox.ShowDialog()
+        If ($Result -eq [System.Windows.Forms.DialogResult]::OK) {
             $SelectedFileType = [System.IO.Path]::GetExtension($FileSaveDialogBox.FileName)
-            switch ($SelectedFileType) {
+            Switch ($SelectedFileType) {
+                ".xlsx" {
+                    $List | Export-Excel -Path $FileSaveDialogBox.FileName -WorksheetName "Wi-fi Credentials" -TableName "WiFiCredentials" -TableStyle Medium9
+                }
                 ".csv" {
                     $List | Export-Csv -Path $FileSaveDialogBox.FileName -NoTypeInformation
-                }
-                ".xlsx" {
-                    $List | Export-Excel -Path $FileSaveDialogBox.FileName
                 }
                 ".txt" {
                     $List | Out-File -FilePath $FileSaveDialogBox.FileName -Encoding UTF8
@@ -46,3 +52,11 @@ $WirelessProfiles | ForEach-Object {
             }
         }
     }
+
+    # Closing message
+    $ListFile = $FileSaveDialogBox.FileName
+    Write-Host `n"Wi-Fi credentials have been retrieved"
+    Start-Sleep -Seconds 2
+    Write-Host `n"The list of Wi-Fi credentials has been saved at $ListFile"
+    Write-Host `n"This window will close shortly"
+    Start-Sleep -Seconds 5
