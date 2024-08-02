@@ -18,7 +18,7 @@ $Screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $ScreenWidth = $Screen.Width
 $ScreenHeight = $Screen.Height
 
-# The "Get-CimInstance xxx" commands retrieve the system information
+# The "Get-CimInstance xxx" cmdlets retrieve the system information
 $CIMComputerSystem = Get-CimInstance Win32_ComputerSystem
 $CIMProcessor = Get-CimInstance CIM_Processor
 $Win32_LogicalDisk = Get-WmiObject Win32_LogicalDisk -Filter "DeviceID = 'C:'"
@@ -169,6 +169,19 @@ $BatteryReportData = $BatteryReport.BatteryReport.Batteries | ForEach-Object {
     }
 }
 
+# Retrieves all of the currently enabled firewall rules and formats the data
+$FirewallRules = Get-NetFirewallRule | 
+    Where-Object {$_.Enabled -eq "True"} | 
+    Select-Object @{Name='Name';Expression={$_.Name}},
+                  @{Name='Display Name';Expression={$_.DisplayName}},
+                  @{Name='Enabled';Expression={$_.Enabled}},
+                  @{Name='Profile';Expression={$_.Profile}},
+                  @{Name='Direction';Expression={$_.Direction}},
+                  @{Name='Action';Expression={$_.Action}},
+                  @{Name='Edge Traversal Policy';Expression={$_.EdgeTraversalPolicy}},
+                  @{Name='Description';Expression={$_.Description}},
+                  @{Name='Display Group';Expression={$_.DisplayGroup}}
+
 # Prompt the user to save the results as an Excel spreadsheet (.xlsx) or .txt file
 Write-Host `n"You will now be prompted to save the results as a spreadsheet or .txt file"
 Start-Sleep -Seconds 3
@@ -194,6 +207,7 @@ If ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $PrintersList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Printers" -TableName "Printers" -TableStyle Medium9 -Append
             $WiFiList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Wi-Fi Credentials" -TableName "WiFiCredentials" -TableStyle Medium9 -Append
             $NetworkAdapterList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Network Adapters" -TableName "NetworkAdapters" -TableStyle Medium9 -Append
+            $FirewallRules | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Firewall Rules" -TableName "FirewallRules" -TableStyle Medium9 -Append
             $BluetoothList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Bluetooth Devices" -TableName "BluetoothDevices" -TableStyle Medium9 -Append
             $USBList | Export-Excel -Path $FilePath -AutoSize -WorksheetName "USB Devices" -TableName "USBDevices" -TableStyle Medium9 -Append
             $PowerPlanDetails | Export-Excel -Path $FilePath -AutoSize -WorksheetName "Power Plans" -TableName "PowerPlans" -TableStyle Medium9 -Append
@@ -206,6 +220,7 @@ If ($SaveFileDialog.ShowDialog() -eq 'OK') {
             $BitLockerOutput | Out-File -FilePath $FilePath -Append
             $BluetoothList | Out-File -FilePath $FilePath -Append
             $NetworkAdapterList | Out-File -FilePath $FilePath -Append
+            $FirewallRules | Out-File -FilePath $FilePath -Append
             $PrintersList | Out-File -FilePath $FilePath -Append
             $USBList | Out-File -FilePath $FilePath -Append
             $WiFiList | Out-File -FilePath $FilePath -Append
@@ -220,7 +235,7 @@ Remove-Item -Path $DesktopFolder\\BitLockerTemp.csv
 Remove-Item -Path $DesktopFolder\\BatteryReport.xml
 
 # End message
-Write-Host `n"Your results spreadsheet has been saved at: $FilePath"
+Write-Host `n"Your results file has been saved at: $FilePath"
 Start-Sleep -Seconds 3
 Write-Host `n"This window will close shortly."
 Start-Sleep -Seconds 5
