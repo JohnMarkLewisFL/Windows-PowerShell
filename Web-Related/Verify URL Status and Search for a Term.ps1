@@ -1,6 +1,5 @@
 # This script uses the Invoke-WebRequest cmdlet to verify if a website is online and subsequently search for a word on that page
 
-
 # Starts a Do While loop to re-run the script if necessary
 Do {
     # Prompts the user to enter a URL
@@ -12,7 +11,7 @@ Do {
         Write-Host `n"$URL is online."
     } Catch {
         Write-Host `n"$URL is not reachable."
-        Exit
+        Continue
     }
 
     # Prompts the user to enter a search term
