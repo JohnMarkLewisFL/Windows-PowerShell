@@ -1,5 +1,6 @@
 # This script will automatically check the C drive's current BitLocker status
-# If XTS-AES 128 encryption is used, then it will automatically decrypt the drive and prompt for a reboot to initiate BitLocker encryption with XTS-AES 256 (used space only)
+# If 128-bit encryption is used, then it will automatically decrypt the drive 
+# and prompt for a reboot to initiate BitLocker encryption with XTS-AES 256 (used space only)
 
 # Elevate the script to run as Administrator automatically
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
@@ -28,9 +29,9 @@ if ($BitLockerStatus.EncryptionMethod -eq 'None') {
     Force-Reboot
 }
 
-# Case 2: Drive C: is encrypted with XTS-AES 128
-elseif ($BitLockerStatus.EncryptionMethod -eq 'XtsAes128') {
-    Write-Host "`nDrive C: is encrypted with XTS-AES 128. Starting decryption."
+# Case 2: Drive C: is encrypted with 128-bit encryption (XTS or legacy AES)
+elseif ($BitLockerStatus.EncryptionMethod -in @('XtsAes128', 'Aes128')) {
+    Write-Host "`nDrive C: is encrypted with 128-bit encryption. Starting decryption."
     Disable-BitLocker -MountPoint "C:"
 
     # Wait for the decryption process to complete
@@ -46,10 +47,14 @@ elseif ($BitLockerStatus.EncryptionMethod -eq 'XtsAes128') {
     Force-Reboot
 }
 
-# Case 3: Drive C: is already encrypted with XTS-AES 256
-elseif ($BitLockerStatus.EncryptionMethod -eq 'XtsAes256') {
-    Write-Host "`nDrive C: is already encrypted with XTS-AES 256."
-} else {
+# Case 3: Drive C: is already encrypted with 256-bit encryption (XTS or legacy AES)
+elseif ($BitLockerStatus.EncryptionMethod -in @('XtsAes256', 'Aes256')) {
+    Write-Host "`nDrive C: is already encrypted with 256-bit encryption."
+}
+
+# Case 4: Unknown state
+else {
     Write-Host "`nUnknown encryption state: $($bitlockerStatus.EncryptionMethod)"
 }
+
 Pause
